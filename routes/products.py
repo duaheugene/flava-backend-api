@@ -1,93 +1,68 @@
 from datetime import datetime
-from typing import Generator
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlmodel import select
 
+from database import get_db
 from models.products import Product
 from schemas.product import ProductCreate, ProductUpdate, ProductResponse
+from services.auth_services import get_current_user
+
+router = APIRouter(prefix="/products", tags=["Products"])
 
 
-router = APIRouter(prefix="/products", tags=["products"])
-
-
-def get_db() -> Generator:
-    """Dependency for database session management."""
-    from database import SessionLocal
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-@router.post(
-    "",
-    response_model=ProductResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a new product"
-)
+@router.post("/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 def create_product(
     product_data: ProductCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    """
-    Create a new product.
-
-    **Authentication**: Admin/Merchant only (add dependency as needed)
-    """
-    product = Product(
-        name=product_data.name,
-        description=product_data.description,
-        price=product_data.price,
-        image_url=product_data.image_url,
-        category=product_data.category,
-        is_available=product_data.is_available,
-        restaurant_id=product_data.restaurant_id,
-    )
+    product = Product(**product_data.model_dump())
     db.add(product)
     db.commit()
     db.refresh(product)
     return product
 
 
-@router.get(
-    "/{product_id}",
-    response_model=ProductResponse,
-    summary="Retrieve a product by ID"
-)
+@router.get("/", response_model=list[ProductResponse])
+def get_products(
+    db: Session = Depends(get_db),
+    search: str | None = Query(default=None, description="Search by product name"),
+    category: str | None = Query(default=None, description="Filter by category"),
+    store_name: str | None = Query(default=None, description="Filter by store name"),
+    available_only: bool = Query(default=False, description="Show only available products"),
+):
+    query = db.query(Product)
+
+    if search:
+        query = query.filter(Product.name.ilike(f"%{search}%"))
+    if category:
+        query = query.filter(Product.category.ilike(category))
+    if store_name:
+        query = query.filter(Product.store_name.ilike(store_name))
+    if available_only:
+        query = query.filter(Product.is_available == True)
+
+    return query.order_by(Product.name).all()
+
+
+@router.get("/{product_id}", response_model=ProductResponse)
 def get_product(product_id: int, db: Session = Depends(get_db)):
-    """Fetch a single product by ID."""
-    product = db.get(Product, product_id)
+    product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Product with id {product_id} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Product with id {product_id} not found")
     return product
 
 
-@router.put(
-    "/{product_id}",
-    response_model=ProductResponse,
-    summary="Update a product"
-)
+@router.put("/{product_id}", response_model=ProductResponse)
 def update_product(
     product_id: int,
     product_data: ProductUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    """
-    Update an existing product.
-
-    **Authentication**: Admin/Merchant only (add dependency as needed)
-    """
-    product = db.get(Product, product_id)
+    product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Product with id {product_id} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Product with id {product_id} not found")
 
     update_data = product_data.model_dump(exclude_unset=True)
     update_data["updated_at"] = datetime.utcnow()
@@ -95,29 +70,21 @@ def update_product(
     for field, value in update_data.items():
         setattr(product, field, value)
 
-    db.add(product)
     db.commit()
     db.refresh(product)
     return product
 
 
-@router.delete(
-    "/{product_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a product"
-)
-def delete_product(product_id: int, db: Session = Depends(get_db)):
-    """
-    Delete a product by ID.
-
-    **Authentication**: Admin/Merchant only (add dependency as needed)
-    """
-    product = db.get(Product, product_id)
+@router.delete("/{product_id}", status_code=status.HTTP_200_OK)
+def delete_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Product with id {product_id} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Product with id {product_id} not found")
 
     db.delete(product)
     db.commit()
+    return {"message": "Product deleted successfully"}

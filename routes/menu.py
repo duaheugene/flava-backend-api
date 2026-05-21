@@ -1,65 +1,53 @@
-from typing import Generator, Dict, List
+from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlmodel import select
 
+from database import get_db
 from models.products import Product
 from schemas.product import ProductResponse
 
-
-router = APIRouter(prefix="/menu", tags=["menu"])
-
-
-def get_db() -> Generator:
-    """Dependency for database session management."""
-    from database import SessionLocal
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+router = APIRouter(prefix="/menu", tags=["Menu"])
 
 
-@router.get(
-    "/restaurant/{restaurant_id}",
-    response_model=Dict[str, List[ProductResponse]],
-    summary="Get menu for a restaurant"
-)
-def get_restaurant_menu(restaurant_id: int, db: Session = Depends(get_db)):
-    """
-    Retrieve the complete menu for a restaurant, organized by category.
+@router.get("/", response_model=dict[str, list[ProductResponse]])
+def get_menu(db: Session = Depends(get_db)):
+    products = (
+        db.query(Product)
+        .filter(Product.is_available == True)
+        .order_by(Product.category, Product.name)
+        .all()
+    )
 
-    Products are automatically filtered to show only available items.
+    menu = defaultdict(list)
+    for product in products:
+        menu[product.category].append(ProductResponse.model_validate(product))
 
-    **Response format**:
-    ```json
-    {
-        "Starters": [...],
-        "Mains": [...],
-        "Drinks": [...]
-    }
-    ```
-    """
-    # Fetch all available products for the restaurant
-    statement = select(Product).where(
-        Product.restaurant_id == restaurant_id,
-        Product.is_available == True
-    ).order_by(Product.category, Product.name)
+    return dict(menu)
 
-    products = db.exec(statement).all()
+
+@router.get("/store/{store_name}", response_model=dict[str, list[ProductResponse]])
+def get_store_menu(store_name: str, db: Session = Depends(get_db)):
+    products = (
+        db.query(Product)
+        .filter(Product.store_name.ilike(store_name), Product.is_available == True)
+        .order_by(Product.category, Product.name)
+        .all()
+    )
 
     if not products:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No available products found for restaurant {restaurant_id}"
+            detail=f"No available products found for store '{store_name}'",
         )
 
-    # Group products by category
-    menu: Dict[str, List[ProductResponse]] = {}
+    menu = defaultdict(list)
     for product in products:
-        category = product.category
-        if category not in menu:
-            menu[category] = []
-        menu[category].append(ProductResponse.model_validate(product))
+        menu[product.category].append(ProductResponse.model_validate(product))
 
-    return menu
+    return dict(menu)
+
+
+@router.get("/stores", response_model=list[str])
+def get_stores(db: Session = Depends(get_db)):
+    rows = db.query(Product.store_name).distinct().order_by(Product.store_name).all()
+    return [row[0] for row in rows]

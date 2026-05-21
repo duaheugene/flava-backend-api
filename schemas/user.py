@@ -1,6 +1,6 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from models.user import UserRole
 
 
@@ -21,6 +21,8 @@ class UserUpdate(BaseModel):
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     full_name: str
     email: str
@@ -31,15 +33,13 @@ class UserResponse(BaseModel):
     location: Optional[str]
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
-
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str

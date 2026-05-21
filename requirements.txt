@@ -4,4 +4,3 @@ sqlalchemy
 pydantic[email]
 passlib[bcrypt]
 python-jose[cryptography]
-sqlmodel

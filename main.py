@@ -1,14 +1,14 @@
 from fastapi import FastAPI
 
 from database import Base, engine
-from models import user, products, categories
+from models import user, products, categories  # noqa: F401 - ensures models are registered
 from routes import auth, products as product_routes, categories as category_routes, menu
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Flava Backend API",
-    description="Backend API system for food products, menu items, stores, categories, authentication, and SQLite integration.",
+    description="Backend API system for food products, menu items, store products, categories, authentication, authorization, and SQLite integration.",
     version="1.0.0",
 )
 

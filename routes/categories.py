@@ -3,14 +3,19 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models.categories import Category
-from schemas.product import CategoryCreate, CategoryResponse
-from routes.auth import get_current_user
+from models.products import Product
+from schemas.product import CategoryCreate, CategoryResponse, ProductResponse
+from services.auth_services import get_current_user
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
 
 @router.post("/", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
-def create_category(category: CategoryCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+def create_category(
+    category: CategoryCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     existing = db.query(Category).filter(Category.name == category.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="Category already exists")
@@ -24,7 +29,7 @@ def create_category(category: CategoryCreate, db: Session = Depends(get_db), cur
 
 @router.get("/", response_model=list[CategoryResponse])
 def get_categories(db: Session = Depends(get_db)):
-    return db.query(Category).all()
+    return db.query(Category).order_by(Category.name).all()
 
 
 @router.get("/{category_id}", response_model=CategoryResponse)
@@ -35,8 +40,22 @@ def get_category(category_id: int, db: Session = Depends(get_db)):
     return category
 
 
+@router.get("/{category_name}/products", response_model=list[ProductResponse])
+def get_products_by_category(category_name: str, db: Session = Depends(get_db)):
+    return (
+        db.query(Product)
+        .filter(Product.category.ilike(category_name), Product.is_available == True)
+        .order_by(Product.name)
+        .all()
+    )
+
+
 @router.delete("/{category_id}")
-def delete_category(category_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+def delete_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
