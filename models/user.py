@@ -7,7 +7,7 @@ from database import Base
 
 class UserRole(str, enum.Enum):
     customer = "customer"
-    vendor = "vendor"       # kitchen/store owner
+    vendor = "vendor"
     admin = "admin"
 
 
@@ -22,7 +22,7 @@ class User(Base):
     role = Column(Enum(UserRole), default=UserRole.customer, nullable=False)
     is_active = Column(Boolean, default=True)
     profile_image = Column(String(500), nullable=True)
-    location = Column(String(200), nullable=True)   # e.g. "Accra, Ghana"
+    location = Column(String(200), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
